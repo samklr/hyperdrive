@@ -18,23 +18,24 @@ package za.co.absa.hyperdrive.driver.drivers
 import java.time.Duration
 import java.util.UUID.randomUUID
 import java.util.{Collections, Properties}
-
 import org.apache.avro.Schema.{Parser, Type}
 import org.apache.avro.generic.{GenericData, GenericRecord}
 import org.apache.avro.util.Utf8
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerConfig, ProducerRecord}
-import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import za.co.absa.abris.avro.read.confluent.SchemaManagerFactory
 import za.co.absa.commons.io.TempDirectory
-import za.co.absa.commons.spark.SparkTestBase
+import za.co.absa.spark.commons.test.SparkTestBase
 
 
 /**
  * This e2e test requires a Docker installation on the executing machine.
  */
-class KafkaToKafkaDockerTest extends FlatSpec with Matchers with SparkTestBase with BeforeAndAfter {
+class KafkaToKafkaDockerTest extends AnyFlatSpec with Matchers with SparkTestBase with BeforeAndAfter {
 
   private val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
   private val baseDir = TempDirectory("hyperdriveE2eTest").deleteOnExit()
@@ -93,7 +94,6 @@ class KafkaToKafkaDockerTest extends FlatSpec with Matchers with SparkTestBase w
       "component.writer" -> "za.co.absa.hyperdrive.ingestor.implementation.writer.kafka.KafkaStreamWriter",
 
       // Spark settings
-      "ingestor.spark.app.name" -> "ingestor-app",
       "ingestor.spark.termination.method" -> "ProcessAllAvailable",
 
       // Source(Kafka) settings

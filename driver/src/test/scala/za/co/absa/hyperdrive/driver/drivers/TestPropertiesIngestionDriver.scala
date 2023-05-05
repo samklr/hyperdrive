@@ -15,19 +15,23 @@
 
 package za.co.absa.hyperdrive.driver.drivers
 
-import org.scalatest.{FlatSpec, Matchers}
-import za.co.absa.hyperdrive.driver.SparkIngestor.KEY_APP_NAME
 
-class TestPropertiesIngestionDriver extends FlatSpec with Matchers {
+
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+
+import java.nio.file.Paths
+
+class TestPropertiesIngestionDriver extends AnyFlatSpec with Matchers {
 
   behavior of PropertiesIngestionDriver.getClass.getSimpleName
 
   it should "load all configuration" in {
-    val configurationFile = getClass.getClassLoader.getResource("ingestion.properties").getPath
+    val configurationFilePath = Paths.get(getClass.getClassLoader.getResource("ingestion.properties").toURI).toString
+    val args = Array(configurationFilePath)
 
-    val config = PropertiesIngestionDriver.loadConfiguration(configurationFile)
+    val config = PropertiesIngestionDriver.loadConfiguration(args)
 
-    config.getString("ingestor.spark.app.name") shouldBe "any_name"
     config.getStringArray("reader.kafka.brokers") shouldBe Array("localhost:9092", "otherhost:9093")
     config.getString("ssl.keystore.password") shouldBe "any-keystore!!@#$% password"
     config.getString("ssl.truststore.password") shouldBe "kd9910))383(((*-+"

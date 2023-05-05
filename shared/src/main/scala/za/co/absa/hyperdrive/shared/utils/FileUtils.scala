@@ -33,6 +33,6 @@ private[hyperdrive] object FileUtils {
 
   def isEmpty(directory: String)(implicit fs: FileSystem): Boolean = {
     val path = new Path(directory)
-    fs.exists(path) &&  !fs.listFiles(path, true).hasNext
+    fs.exists(path) && !fs.listFiles(path, true).hasNext
   }
 }

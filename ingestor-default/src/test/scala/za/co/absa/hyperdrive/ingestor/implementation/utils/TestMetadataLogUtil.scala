@@ -18,11 +18,13 @@ package za.co.absa.hyperdrive.ingestor.implementation.utils
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
-import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import za.co.absa.commons.io.TempDirectory
-import za.co.absa.commons.spark.SparkTestBase
+import za.co.absa.spark.commons.test.SparkTestBase
 
-class TestMetadataLogUtil extends FlatSpec with Matchers with SparkTestBase with BeforeAndAfter {
+class TestMetadataLogUtil extends AnyFlatSpec with Matchers with SparkTestBase with BeforeAndAfter {
 
   import spark.implicits._
 
@@ -33,7 +35,7 @@ class TestMetadataLogUtil extends FlatSpec with Matchers with SparkTestBase with
 
   before {
     baseDir = TempDirectory("TestMetadataLogUtil").deleteOnExit()
-    baseDirPath = baseDir.path.toAbsolutePath.toString
+    baseDirPath = baseDir.path.toAbsolutePath.toUri.toString
   }
 
   after {
@@ -73,7 +75,7 @@ class TestMetadataLogUtil extends FlatSpec with Matchers with SparkTestBase with
 
   it should "return the empty set if the root folder is empty" in {
     val dir = TempDirectory()
-    val diff = MetadataLogUtil.getParquetFilesNotListedInMetadataLog(spark, dir.path.toAbsolutePath.toString)
+    val diff = MetadataLogUtil.getParquetFilesNotListedInMetadataLog(spark, dir.path.toAbsolutePath.toUri.toString)
 
     diff.isSuccess shouldBe true
     diff.get shouldBe empty

@@ -21,16 +21,17 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.mockito.ArgumentMatchers.{eq => eqTo, _}
 import org.mockito.Mockito
 import org.mockito.Mockito._
-import org.scalatest.mockito.MockitoSugar
-import org.scalatest.{BeforeAndAfterEach, FlatSpec, Matchers}
-import za.co.absa.commons.spark.SparkTestBase
-import za.co.absa.hyperdrive.driver.TerminationMethodEnum.AwaitTermination
+import org.scalatestplus.mockito.MockitoSugar
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import za.co.absa.hyperdrive.ingestor.api.reader.StreamReader
 import za.co.absa.hyperdrive.ingestor.api.transformer.StreamTransformer
 import za.co.absa.hyperdrive.ingestor.api.writer.StreamWriter
 import za.co.absa.hyperdrive.shared.exceptions.{IngestionException, IngestionStartException}
+import za.co.absa.spark.commons.test.SparkTestBase
 
-class TestSparkIngestor extends FlatSpec with BeforeAndAfterEach with MockitoSugar with SparkTestBase with Matchers {
+class TestSparkIngestor extends AnyFlatSpec with BeforeAndAfterEach with MockitoSugar with SparkTestBase with Matchers {
 
   private val streamReader: StreamReader = mock[StreamReader]
   private val streamTransformer: StreamTransformer = mock[StreamTransformer]
@@ -38,13 +39,11 @@ class TestSparkIngestor extends FlatSpec with BeforeAndAfterEach with MockitoSug
 
   private val dataFrame: DataFrame = mock[DataFrame]
   private val streamingQuery: StreamingQuery = mock[StreamingQuery]
-  private val configuration = {
-    val config = new BaseConfiguration
-    config.addProperty(SparkIngestor.KEY_APP_NAME, "my-app-name")
-    config
-  }
+  private val configuration = new BaseConfiguration
 
   override def beforeEach(): Unit = {
+    // Used to initialize spark session in SparkTestBase trait
+    spark.sparkContext
     reset(
       streamReader,
       streamTransformer,
@@ -100,23 +99,8 @@ class TestSparkIngestor extends FlatSpec with BeforeAndAfterEach with MockitoSug
     verify(streamingQuery).awaitTermination()
   }
 
-  it should "use the configured app name" in {
-    val config = new BaseConfiguration
-    config.addProperty(SparkIngestor.KEY_APP_NAME, "my-app-name")
-    val sparkIngestor = SparkIngestor(config)
-
-    sparkIngestor.spark.conf.get("spark.app.name") shouldBe "my-app-name"
-  }
-
-  it should "throw if no app name is configured" in {
-    val throwable = intercept[IllegalArgumentException](SparkIngestor(new BaseConfiguration))
-
-    throwable.getMessage should include(SparkIngestor.KEY_APP_NAME)
-  }
-
   it should "use terminationMethod awaitTermination if configured" in {
     val config = new BaseConfiguration
-    config.addProperty(SparkIngestor.KEY_APP_NAME, "my-spark-app")
     val sparkIngestor = SparkIngestor(config)
     when(streamReader.read(any[SparkSession])).thenReturn(dataFrame)
     when(streamTransformer.transform(dataFrame)).thenReturn(dataFrame)
@@ -129,7 +113,6 @@ class TestSparkIngestor extends FlatSpec with BeforeAndAfterEach with MockitoSug
 
   it should "use timeout if configured with terminationMethod awaitTermination" in {
     val config = new BaseConfiguration
-    config.addProperty(SparkIngestor.KEY_APP_NAME, "my-spark-app")
     config.addProperty(s"${SparkIngestor.KEY_AWAIT_TERMINATION_TIMEOUT}", "10000")
     val sparkIngestor = SparkIngestor(config)
     when(streamReader.read(any[SparkSession])).thenReturn(dataFrame)
@@ -143,7 +126,6 @@ class TestSparkIngestor extends FlatSpec with BeforeAndAfterEach with MockitoSug
 
   it should "throw if an invalid terminationMethod is configured" in {
     val config = new BaseConfiguration
-    config.addProperty(SparkIngestor.KEY_APP_NAME, "my-spark-app")
     config.addProperty(s"${SparkIngestor.KEY_TERMINATION_METHOD}", "non-existent")
     val throwable = intercept[IllegalArgumentException](SparkIngestor(config))
 
@@ -152,7 +134,6 @@ class TestSparkIngestor extends FlatSpec with BeforeAndAfterEach with MockitoSug
 
   it should "throw if a timeout is not a number" in {
     val config = new BaseConfiguration
-    config.addProperty(SparkIngestor.KEY_APP_NAME, "my-spark-app")
     config.addProperty(s"${SparkIngestor.KEY_AWAIT_TERMINATION_TIMEOUT}", "nan")
     val throwable = intercept[IllegalArgumentException](SparkIngestor(config))
 

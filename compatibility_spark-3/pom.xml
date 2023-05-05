@@ -19,7 +19,7 @@
     <parent>
         <artifactId>parent-conf_2.12</artifactId>
         <groupId>za.co.absa.hyperdrive</groupId>
-        <version>4.5.3-SNAPSHOT</version>
+        <version>4.7.1-SNAPSHOT</version>
         <relativePath>../parent-conf/pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -33,7 +33,17 @@
     <dependencies>
         <dependency>
             <groupId>za.co.absa.hyperdrive</groupId>
+            <artifactId>api_${scala.compat.version}</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>za.co.absa.hyperdrive</groupId>
             <artifactId>compatibility-api_${scala.compat.version}</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>za.co.absa.hyperdrive</groupId>
+            <artifactId>shared_${scala.compat.version}</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -45,6 +55,15 @@
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-core_${scala.compat.version}</artifactId>
             <version>${spark.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.delta</groupId>
+            <artifactId>delta-core_${scala.compat.version}</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hudi</groupId>
+            <artifactId>hudi-spark3.2-bundle_${scala.compat.version}</artifactId>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 </project>

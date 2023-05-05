@@ -16,12 +16,13 @@
 package za.co.absa.hyperdrive.ingestor.api.utils
 
 import org.apache.commons.configuration2.convert.DefaultListDelimiterHandler
-import org.apache.commons.configuration2.{BaseConfiguration, Configuration}
-import org.scalatest.mockito.MockitoSugar
-import org.scalatest.{FlatSpec, Matchers}
+import org.apache.commons.configuration2.{BaseConfiguration, Configuration, ConfigurationConverter}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.mockito.MockitoSugar
 import za.co.absa.hyperdrive.ingestor.api.transformer.StreamTransformerFactory
 
-class TestConfigUtils extends FlatSpec with Matchers with MockitoSugar {
+class TestConfigUtils extends AnyFlatSpec with Matchers with MockitoSugar {
 
   behavior of s"ConfigUtils"
 
@@ -311,17 +312,50 @@ class TestConfigUtils extends FlatSpec with Matchers with MockitoSugar {
     val config = new BaseConfiguration
     config.addProperty("key1", "")
     config.addProperty("key2", "nay")
-    config.addProperty("key3", "1")
     config.addProperty("key4", 0)
 
     val ex1 = the[Exception] thrownBy ConfigUtils.getOptionalBoolean("key1", config)
     ex1.getMessage should include("key1")
     val ex2 = the[Exception] thrownBy ConfigUtils.getOptionalBoolean("key2", config)
     ex2.getMessage should include("key2")
-    val ex3 = the[Exception] thrownBy ConfigUtils.getOptionalBoolean("key3", config)
-    ex3.getMessage should include("key3")
     val ex4 = the[Exception] thrownBy ConfigUtils.getOptionalBoolean("key4", config)
     ex4.getMessage should include("key4")
+  }
+
+  "getMapOrEmpty" should "return the value as an map if key exists" in {
+    // given
+    val config = new BaseConfiguration()
+    config.setListDelimiterHandler(new DefaultListDelimiterHandler(','))
+    config.addProperty("key.subKey", "value1, value2, value3, value4")
+
+    // when
+    val value = ConfigUtils.getMapOrEmpty("key", config)
+
+    // then
+    value should contain theSameElementsAs Map("subKey" -> List("value1", "value2", "value3", "value4"))
+  }
+
+  it should "return map with empty sequence if key exists but value is empty" in {
+    // given
+    val config = new BaseConfiguration()
+    config.addProperty("key.subKey", "")
+
+    // when
+    val value = ConfigUtils.getMapOrEmpty("key", config)
+
+    // then
+    value should contain theSameElementsAs Map("subKey" -> List())
+  }
+
+  it should "return Empty map if key does not exist" in {
+    // given
+    val config = new BaseConfiguration()
+
+    // when
+    val value = ConfigUtils.getMapOrEmpty("key.subKey", config)
+
+    // then
+    value shouldBe Map.empty
   }
 
   "getTransformerPrefix" should "get the prefix of a transformer class" in {
@@ -352,5 +386,53 @@ class TestConfigUtils extends FlatSpec with Matchers with MockitoSugar {
 
     filteredMap.size shouldBe 1
     filteredMap("normal.key") shouldBe "normal value"
+  }
+
+  "getSubsets" should "return a map of children keys to subset configs" in {
+    val config = new BaseConfiguration
+    config.addProperty("service.items.myItem1.name", "My Item 1")
+    config.addProperty("service.items.myItem1.description", "Very nice item 1")
+    config.addProperty("service.items.myItem2.name", "My Item 2")
+    config.addProperty("service.items.myItem2.description", "Very nice item 2")
+    config.addProperty("service.items.myItem2.options.color", "blue")
+    config.addProperty("service.items.myItem2.options.size", "large")
+    config.addProperty("service.items.myItem3", "The third item")
+    config.addProperty("service.name", "Item Service")
+
+    val subsets = ConfigUtils.getSubsets(config, "service.items")
+
+    import scala.collection.JavaConverters._
+    subsets.keys should contain theSameElementsAs Array("myItem1", "myItem2")
+    ConfigurationConverter.getMap(subsets("myItem1")).asScala should contain theSameElementsAs Map(
+      "name" -> "My Item 1",
+      "description" -> "Very nice item 1"
+    )
+    ConfigurationConverter.getMap(subsets("myItem2")).asScala should contain theSameElementsAs Map(
+      "name" -> "My Item 2",
+      "description" -> "Very nice item 2",
+      "options.color" -> "blue",
+      "options.size" -> "large"
+    )
+  }
+
+  "getSubsets" should "return the correct subsets if the prefix ends with a dot" in {
+    val config = new BaseConfiguration
+    config.addProperty("parent.child.grandchild.someStuff.value", "Anything")
+
+    val subsets = ConfigUtils.getSubsets(config, "parent.child.grandchild.")
+
+    import scala.collection.JavaConverters._
+    subsets.keys should contain theSameElementsAs Array("someStuff")
+    subsets("someStuff").getKeys.asScala.toSeq should contain theSameElementsAs Array("value")
+    subsets("someStuff").getString("value") shouldBe "Anything"
+  }
+
+  "getSubsets" should "return an empty map if the prefix does not exist" in {
+    val config = new BaseConfiguration
+    config.addProperty("parent.child.grandchild.someStuff.value", "Anything")
+
+    val subsets = ConfigUtils.getSubsets(config, "child.grandchild")
+
+    subsets shouldBe Map()
   }
 }

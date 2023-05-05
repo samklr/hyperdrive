@@ -18,7 +18,6 @@ package za.co.absa.hyperdrive.ingestor.api.utils
 import org.apache.commons.configuration2.{Configuration, ConfigurationConverter}
 import za.co.absa.hyperdrive.ingestor.api.transformer.{StreamTransformer, StreamTransformerFactory}
 
-import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 object ConfigUtils {
@@ -61,6 +60,15 @@ object ConfigUtils {
     } else {
       None
     }
+  }
+
+  def getMapOrEmpty(key: String, configuration: Configuration): Map[String, Seq[String]] = {
+    import scala.collection.JavaConverters._
+
+    val subConfiguration = configuration.subset(key)
+    subConfiguration.getKeys.asScala.map(key => {
+      key -> getSeqOrNone(key, subConfiguration).getOrElse(Seq.empty[String])
+    }).toMap
   }
 
   def getPropertySubset(configuration: Configuration, prefix: String): Map[String, String] = {
@@ -108,10 +116,29 @@ object ConfigUtils {
     val transformerPrefixMap = ConfigurationConverter.getMap(transformerPrefixConfig).asScala
     transformerPrefixMap.find {
       case (_: String, value: String) => value == className
+      case (key: AnyRef, value: AnyRef) => throwUnexpectedTypeException(key, value)
     }.map {
       case (key: String, _) => key
+      case (key: AnyRef, value: AnyRef) => throwUnexpectedTypeException(key, value)
     }
+  }
+  private def throwUnexpectedTypeException(key: AnyRef, value: AnyRef)={
+    throw new IllegalArgumentException(s"Unexpected type for key $key and value $value")
   }
 
   def filterKeysContaining(map: Map[String, String], exclusionToken: String): Map[String, String] = map.filterKeys(!_.contains(exclusionToken))
+
+  def getSubsets(config: Configuration, prefix: String): Map[String, Configuration] = {
+    import scala.collection.JavaConverters._
+    val sep = "."
+    val prefixWithDot = if (prefix.endsWith(sep)) prefix else prefix + sep
+    val childKeys = config.getKeys.asScala.toSeq
+      .filter(_.startsWith(prefixWithDot))
+      .map(_.replace(prefixWithDot, ""))
+      .filter(_.contains(sep))
+      .map(key => key.substring(0, key.indexOf(sep)))
+      .toSet
+
+    childKeys.map(key => key -> config.subset(s"$prefixWithDot$key")).toMap
+  }
 }

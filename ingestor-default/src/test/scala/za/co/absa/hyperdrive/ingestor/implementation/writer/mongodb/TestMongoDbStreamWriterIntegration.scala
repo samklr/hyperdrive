@@ -17,16 +17,17 @@ package za.co.absa.hyperdrive.ingestor.implementation.writer.mongodb
 
 import org.apache.commons.configuration2.BaseConfiguration
 import org.apache.spark.sql.DataFrame
-import org.scalatest.{BeforeAndAfter, FlatSpec}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.flatspec.AnyFlatSpec
 import za.co.absa.commons.io.TempDirectory
-import za.co.absa.commons.spark.SparkTestBase
+import za.co.absa.spark.commons.test.SparkTestBase
 import za.co.absa.hyperdrive.ingestor.api.writer.{StreamWriter, StreamWriterCommonAttributes}
 import za.co.absa.hyperdrive.ingestor.implementation.testutils.mongodb.ScalaMongoImplicits
 import za.co.absa.hyperdrive.ingestor.implementation.testutils.MemoryStreamFixture
 import za.co.absa.hyperdrive.ingestor.implementation.testutils.mongodb.MongoDbFixture
 import za.co.absa.hyperdrive.ingestor.implementation.writer.mongodb.MongoDbStreamWriter.{KEY_COLLECTION, KEY_DATABASE, KEY_URI}
 
-class TestMongoDbStreamWriterIntegration extends FlatSpec with SparkTestBase with MongoDbFixture with MemoryStreamFixture with BeforeAndAfter {
+class TestMongoDbStreamWriterIntegration extends AnyFlatSpec with SparkTestBase with MongoDbFixture with MemoryStreamFixture with BeforeAndAfter {
   import spark.implicits._
   import ScalaMongoImplicits._
 

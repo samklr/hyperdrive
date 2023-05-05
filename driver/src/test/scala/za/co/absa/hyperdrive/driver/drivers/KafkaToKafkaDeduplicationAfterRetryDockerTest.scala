@@ -25,10 +25,12 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.kafka.clients.admin.{AdminClient, AdminClientConfig, NewTopic}
 import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerConfig, ProducerRecord}
-import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import za.co.absa.abris.avro.read.confluent.SchemaManagerFactory
 import za.co.absa.commons.io.TempDirectory
-import za.co.absa.commons.spark.SparkTestBase
+import za.co.absa.spark.commons.test.SparkTestBase
 import za.co.absa.abris.avro.registry.SchemaSubject
 import za.co.absa.hyperdrive.ingestor.implementation.transformer.deduplicate.kafka.PrunedConsumerRecord
 import za.co.absa.hyperdrive.ingestor.implementation.utils.KafkaUtil
@@ -56,7 +58,7 @@ import za.co.absa.hyperdrive.shared.exceptions.IngestionException
  * exactly once, thanks to the deduplication transformer (see test case 1).
  * Without the deduplication transformer, the 41st-50th messages are duplicated (see test case 2).
  */
-class KafkaToKafkaDeduplicationAfterRetryDockerTest extends FlatSpec with Matchers with SparkTestBase with BeforeAndAfter {
+class KafkaToKafkaDeduplicationAfterRetryDockerTest extends AnyFlatSpec with Matchers with SparkTestBase with BeforeAndAfter {
   import scala.collection.JavaConverters._
 
   private val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
@@ -162,7 +164,6 @@ class KafkaToKafkaDeduplicationAfterRetryDockerTest extends FlatSpec with Matche
       "component.writer" -> "za.co.absa.hyperdrive.ingestor.implementation.writer.kafka.KafkaStreamWriter",
 
       // Spark settings
-      "ingestor.spark.app.name" -> "ingestor-app",
       "ingestor.spark.termination.timeout" -> "60000",
 
       // Source(Kafka) settings

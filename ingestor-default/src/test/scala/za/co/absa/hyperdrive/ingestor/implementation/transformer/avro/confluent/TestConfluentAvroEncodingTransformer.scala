@@ -22,13 +22,15 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.Trigger
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import za.co.absa.abris.avro.parsing.utils.AvroSchemaUtils
 import za.co.absa.abris.avro.read.confluent.SchemaManagerFactory
 import za.co.absa.abris.avro.registry.ConfluentMockRegistryClient
 import za.co.absa.abris.config.AbrisConfig
-import za.co.absa.commons.spark.SparkTestBase
+import za.co.absa.spark.commons.test.SparkTestBase
 import za.co.absa.hyperdrive.ingestor.api.context.HyperdriveContext
 import za.co.absa.hyperdrive.ingestor.implementation.HyperdriveContextKeys
 import za.co.absa.hyperdrive.ingestor.implementation.testutils.HyperdriveMockSchemaRegistryClient
@@ -36,7 +38,7 @@ import za.co.absa.hyperdrive.ingestor.implementation.transformer.avro.confluent.
 import za.co.absa.hyperdrive.ingestor.implementation.utils.AbrisConfigUtil
 import za.co.absa.hyperdrive.ingestor.implementation.writer.kafka.KafkaStreamWriter
 
-class TestConfluentAvroEncodingTransformer extends FlatSpec with Matchers with BeforeAndAfter with SparkTestBase {
+class TestConfluentAvroEncodingTransformer extends AnyFlatSpec with Matchers with BeforeAndAfter with SparkTestBase {
 
   private val topic = "topic"
   private val SchemaRegistryURL = "http://localhost:8081"
@@ -87,7 +89,6 @@ class TestConfluentAvroEncodingTransformer extends FlatSpec with Matchers with B
     query.awaitTermination()
 
     // then
-    import spark.implicits._
     val outputDf = spark.sql(s"select * from $queryName")
     outputDf.count() shouldBe 100
     val byteArrays = outputDf.select("value").map(_ (0).asInstanceOf[Array[Byte]]).collect()
@@ -166,5 +167,44 @@ class TestConfluentAvroEncodingTransformer extends FlatSpec with Matchers with B
     keySchema.getSchema shouldBe expectedKeySchema.toString
     val valueSchema = mockSchemaRegistryClient.getLatestSchemaMetadata(s"$topic-value")
     valueSchema.getSchema shouldBe expectedValueSchema.toString
+  }
+
+  it should "register a schema with the advanced schema converter" in {
+    // given
+    val schema = StructType(Seq(
+      StructField("col1", IntegerType, nullable = true,
+        new MetadataBuilder().putString(SparkMetadataKeys.DefaultValueKey, "42").build()))
+    )
+
+    import scala.collection.JavaConverters._
+    val df = spark.createDataFrame(Seq[Row]().asJava, schema)
+
+    val config = new BaseConfiguration()
+    config.setListDelimiterHandler(new DefaultListDelimiterHandler(','))
+    config.addProperty(KafkaStreamWriter.KEY_TOPIC, topic)
+    config.addProperty(KEY_SCHEMA_REGISTRY_URL, SchemaRegistryURL)
+    config.addProperty(KEY_SCHEMA_REGISTRY_VALUE_NAMING_STRATEGY, AbrisConfigUtil.TopicNameStrategy)
+    config.addProperty(KEY_USE_ADVANCED_SCHEMA_CONVERSION, "true")
+    val encoder = ConfluentAvroEncodingTransformer(config)
+
+    val expectedSchemaString = {
+      raw"""{
+           |  "type" : "record",
+           |  "name" : "topLevelRecord",
+           |  "fields" : [ {
+           |    "name" : "col1",
+           |    "type" : [ "int", "null" ],
+           |    "default" : 42
+           |  } ]
+           |}
+           |""".stripMargin.filterNot(_.isWhitespace)
+    }
+
+    // when
+    encoder.transform(df)
+
+    // then
+    val schemaMetadata = mockSchemaRegistryClient.getLatestSchemaMetadata(s"$topic-value")
+    schemaMetadata.getSchema shouldBe expectedSchemaString
   }
 }

@@ -21,12 +21,13 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.{DataStreamWriter, OutputMode, Trigger}
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
 import org.mockito.Mockito._
-import org.scalatest.{FlatSpec, Matchers}
-import org.scalatest.mockito.MockitoSugar
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.mockito.MockitoSugar
 import za.co.absa.commons.io.TempDirectory
-import za.co.absa.commons.spark.SparkTestBase
+import za.co.absa.spark.commons.test.SparkTestBase
 
-class TestParquetStreamWriter extends FlatSpec with MockitoSugar with Matchers with SparkTestBase {
+class TestParquetStreamWriter extends AnyFlatSpec with MockitoSugar with Matchers with SparkTestBase {
 
   private val tempDir = TempDirectory().deleteOnExit()
   private val parquetDestination = tempDir.path.resolve("test-parquet")
@@ -94,7 +95,7 @@ class TestParquetStreamWriter extends FlatSpec with MockitoSugar with Matchers w
   it should "throw an exception if the metadata log is inconsistent" in {
     import spark.implicits._
     val baseDir = TempDirectory("TestParquetStreamWriter").deleteOnExit()
-    val destinationPath = s"${baseDir.path.toAbsolutePath.toString}/destination"
+    val destinationPath = s"${baseDir.path.toAbsolutePath.toUri.toString}/destination"
     val input = MemoryStream[Int](1, spark.sqlContext)
     input.addData(List.range(0, 100))
     val df = input.toDF()

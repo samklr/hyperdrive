@@ -44,6 +44,9 @@ The data ingestion pipeline of Hyperdrive consists of four components: readers, 
 - `AddDateVersionTransformerStreamWriter` - adds columns for ingestion date and an auto-incremented version number, to be used for partitioning.
 - `ParquetStreamWriter` - writes the DataFrame as Parquet, in **append** mode.
 - `KafkaStreamWriter` - writes to a Kafka topic.
+- `DeltaCDCToSnapshotWriter` - writes the DataFrame in Delta format. It expects CDC events and performs merge logic and creates the latest snapshot table.
+- `DeltaCDCToSCD2Writer` - writes the DataFrame in Delta format. It expects CDC events and performs merge logic and creates SCD2 table.
+- `HudiCDCToSCD2Writer` - writes the DataFrame in Hudi format. It expects CDC events and performs merge logic and creates SCD2 table.
 
 ### Custom components
 Custom components can be implemented using the [Component Archetype](component-archetype) following the API defined in the package `za.co.absa.hyperdrive.ingestor.api`
@@ -98,7 +101,6 @@ to identify which configuration options belong to a certain transformer instance
 ##### Spark settings
 | Property Name | Required | Description |
 | :--- | :---: | :--- |
-| `ingestor.spark.app.name` | Yes | User-defined name of the Spark application. See Spark property `spark.app.name` |
 | `ingestor.spark.termination.method` | No | Either `processAllAvailable` (stop query when no more messages are incoming) or `awaitTermination` (stop query on signal, e.g. Ctrl-C). Default: `awaitTermination`. See also [Combination of trigger and termination method](#combination-of-trigger-and-termination-method) |
 | `ingestor.spark.await.termination.timeout` | No | Timeout in milliseconds. Stops query when timeout is reached. This option is only valid with termination method `awaitTermination` |
 
@@ -123,9 +125,9 @@ If no file exists, the reader will fail.
 
 Any additional properties can be added with the prefix `reader.parquet.options.`. See [Spark Structured Streaming Documentation](https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html#input-sources)
 
-##### ConfluentAvroStreamDecodingTransformer
-The `ConfluentAvroStreamDecodingTransformer` is built on [ABRiS](https://github.com/AbsaOSS/ABRiS). More details about the configuration properties can be found there.
-**Caution**: The `ConfluentAvroStreamDecodingTransformer` requires the property `reader.kafka.topic` to be set.
+##### ConfluentAvroDecodingTransformer
+The `ConfluentAvroDecodingTransformer` is built on [ABRiS](https://github.com/AbsaOSS/ABRiS). More details about the configuration properties can be found there.
+**Caution**: The `ConfluentAvroDecodingTransformer` requires the property `reader.kafka.topic` to be set.
 
 | Property Name | Required | Description |
 | :--- | :---: | :--- |
@@ -142,14 +144,18 @@ The `ConfluentAvroStreamDecodingTransformer` is built on [ABRiS](https://github.
 | `transformer.{transformer-id}.keep.columns` | No | Comma-separated list of columns to keep (e.g. offset, partition) |
 | `transformer.{transformer-id}.disable.nullability.preservation` | No | Set to true to ignore fix [#137](https://github.com/AbsaOSS/hyperdrive/issues/137) and to keep the same behaviour as for versions prior to and including v3.2.2. Default value: `false` |
 | `transformer.{transformer-id}.schema.registry.basic.auth.user.info.file` | No | A path to a text file, that contains one line in the form `<username>:<password>`. It will be passed as `basic.auth.user.info` to the schema registry config |
+| `transformer.{transformer-id}.use.advanced.schema.conversion` | No | Set to true to convert the avro schema using [AdvancedAvroToSparkConverter](https://github.com/AbsaOSS/hyperdrive/blob/develop/ingestor-default/src/main/scala/za/co/absa/hyperdrive/ingestor/implementation/transformer/avro/confluent/AdvancedAvroToSparkConverter.scala), which puts default value and underlying avro type to struct field metadata. Default false |
 
 For detailed information on the subject name strategy, please take a look at the [Schema Registry Documentation](https://docs.confluent.io/current/schema-registry/).
 
 Any additional properties for the schema registry config can be added with the prefix `transformer.{transformer-id}.schema.registry.options.`
 
-##### ConfluentAvroStreamEncodingTransformer
-The `ConfluentAvroStreamEncodingTransformer` is built on [ABRiS](https://github.com/AbsaOSS/ABRiS). More details about the configuration properties can be found there.
-**Caution**: The `ConfluentAvroStreamEncodingTransformer` requires the property `writer.kafka.topic` to be set.
+Note: `use.advanced.schema.conversion` only works with a patched version of Spark, due to bug [SPARK-34805](https://issues.apache.org/jira/browse/SPARK-34805). 
+For the latest version of Spark, the patch is available in https://github.com/apache/spark/pull/35270. For other versions of Spark, the changes need to be cherry-picked and built locally.
+
+##### ConfluentAvroEncodingTransformer
+The `ConfluentAvroEncodingTransformer` is built on [ABRiS](https://github.com/AbsaOSS/ABRiS). More details about the configuration properties can be found there.
+**Caution**: The `ConfluentAvroEncodingTransformer` requires the property `writer.kafka.topic` to be set.
 
 | Property Name | Required | Description |
 | :--- | :---: | :--- |
@@ -164,6 +170,7 @@ The `ConfluentAvroStreamEncodingTransformer` is built on [ABRiS](https://github.
 | `transformer.{transformer-id}.key.schema.record.namespace` | Yes for key naming strategies `record.name` and `topic.record.name` | Namespace of the record. |
 | `transformer.{transformer-id}.key.optional.fields` | No | Comma-separated list of nullable key columns that should get default value null in the avro schema. Nested columns' names should be concatenated with the dot (`.`) |
 | `transformer.{transformer-id}.schema.registry.basic.auth.user.info.file` | No | A path to a text file, that contains one line in the form `<username>:<password>`. It will be passed as `basic.auth.user.info` to the schema registry config |
+| `transformer.{transformer-id}.use.advanced.schema.conversion` | No | Set to true to convert the avro schema using [AdvancedSparkToAvroConverter](https://github.com/AbsaOSS/hyperdrive/blob/develop/ingestor-default/src/main/scala/za/co/absa/hyperdrive/ingestor/implementation/transformer/avro/confluent/AdvancedSparkToAvroConverter.scala), which reads default value and underlying avro type from struct field metadata. Default false |
 
 Any additional properties for the schema registry config can be added with the prefix `transformer.{transformer-id}.schema.registry.options.`
 
@@ -322,6 +329,83 @@ Common MongoDB additional options
 | `writer.mongodb.option.spark.mongodb.output.forceInsert` | `false`| Forces saves to use inserts, even if a Dataset contains `_id.` |
 More on these options: https://docs.mongodb.com/spark-connector/current/configuration
 
+##### DeltaCDCToSnapshotWriter
+| Property Name                                             | Required | Description                                                                                                                                |
+|:----------------------------------------------------------| :---: |:-------------------------------------------------------------------------------------------------------------------------------------------|
+| `writer.deltacdctosnapshot.destination.directory`         | Yes | Destination path of the sink. Equivalent to Spark property `path` for the `DataStreamWriter`                                               |
+| `writer.deltacdctosnapshot.partition.columns`             | No | Comma-separated list of columns to partition by.                                                                                           |
+| `writer.deltacdctosnapshot.key.column`                    | Yes | A column with unique entity identifier.                                                                                                    |
+| `writer.deltacdctosnapshot.operation.column`              | Yes | A column containing value marking a record with an operation.                                                                              |
+| `writer.deltacdctosnapshot.operation.deleted.values`      | Yes | Values marking a record for deletion in the operation column.                                                                              |
+| `writer.deltacdctosnapshot.precombineColumns`             | Yes | When two records have the same key value, we will pick the one with the largest value for precombine columns. Evaluated in provided order. |
+| `writer.deltacdctosnapshot.precombineColumns.customOrder` | No | Precombine column's custom order in ascending order.                                                                                       |
+| `writer.common.trigger.type`                              | No | See [Combination writer properties](#common-writer-properties)                                                                             |
+| `writer.common.trigger.processing.time`                   | No | See [Combination writer properties](#common-writer-properties)                                                                             |
+
+Any additional properties for the `DataStreamWriter` can be added with the prefix `writer.deltacdctosnapshot.options`, e.g. `writer.deltacdctosnapshot.options.key=value`
+
+**Example**
+
+- `component.writer=za.co.absa.hyperdrive.compatibility.impl.writer.cdc.delta.snapshot.DeltaCDCToSnapshotWriter`
+- `writer.deltacdctosnapshot.destination.directory=/tmp/destination`
+- `writer.deltacdctosnapshot.key.column=key`
+- `writer.deltacdctosnapshot.operation.column=ENTTYP`
+- `writer.deltacdctosnapshot.operation.deleted.values=DL,FD`
+- `writer.deltacdctosnapshot.precombineColumns=TIMSTAMP, ENTTYP`
+- `writer.deltacdctosnapshot.precombineColumns.customOrder.ENTTYP=PT,FI,RR,UB,UP,DL,FD`
+
+##### DeltaCDCToSCD2Writer
+| Property Name                                         | Required | Description                                                                                                                                              |
+|:------------------------------------------------------| :---: |:---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `writer.deltacdctoscd2.destination.directory`         | Yes | Destination path of the sink. Equivalent to Spark property `path` for the `DataStreamWriter`                                                             |
+| `writer.deltacdctoscd2.partition.columns`             | No | Comma-separated list of columns to partition by.                                                                                                         |
+| `writer.deltacdctoscd2.key.column`                    | Yes | A column with unique entity identifier.                                                                                                                  |
+| `writer.deltacdctoscd2.timestamp.column`              | Yes | A column with timestamp.                                                                                                                                 |
+| `writer.deltacdctoscd2.operation.column`              | Yes | A column containing value marking a record with an operation.                                                                                            |
+| `writer.deltacdctoscd2.operation.deleted.values`      | Yes | Values marking a record for deletion in the operation column.                                                                                            |
+| `writer.deltacdctoscd2.precombineColumns`             | Yes | When two records have the same key and timestamp value, we will pick the one with the largest value for precombine columns. Evaluated in provided order. |
+| `writer.deltacdctoscd2.precombineColumns.customOrder` | No | Precombine column's custom order in ascending order.                                                                                                     |
+| `writer.common.trigger.type`                          | No | See [Combination writer properties](#common-writer-properties)                                                                                           |
+| `writer.common.trigger.processing.time`               | No | See [Combination writer properties](#common-writer-properties)                                                                                           |
+
+Any additional properties for the `DataStreamWriter` can be added with the prefix `writer.deltacdctoscd2.options`, e.g. `writer.deltacdctoscd2.options.key=value`
+
+**Example**
+- `component.writer=za.co.absa.hyperdrive.compatibility.impl.writer.cdc.delta.scd2.DeltaCDCToSCD2Writer`
+- `writer.deltacdctoscd2.destination.directory=/tmp/destination`
+- `writer.deltacdctoscd2.key.column=key`
+- `writer.deltacdctoscd2.timestamp.column=TIMSTAMP`
+- `writer.deltacdctoscd2.operation.column=ENTTYP`
+- `writer.deltacdctoscd2.operation.deleted.values=DL,FD`
+- `writer.deltacdctoscd2.precombineColumns=ENTTYP`
+- `writer.deltacdctoscd2.precombineColumns.customOrder.ENTTYP=PT,FI,RR,UB,UP,DL,FD`
+
+##### HudiCDCToSCD2Writer
+| Property Name                                         | Required | Description                                                                                                                                              |
+|:------------------------------------------------------| :---: |:---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `writer.hudicdctoscd2.destination.directory`         | Yes | Destination path of the sink. Equivalent to Spark property `path` for the `DataStreamWriter`                                                             |
+| `writer.hudicdctoscd2.partition.columns`             | No | Comma-separated list of columns to partition by.                                                                                                         |
+| `writer.hudicdctoscd2.key.column`                    | Yes | A column with unique entity identifier.                                                                                                                  |
+| `writer.hudicdctoscd2.timestamp.column`              | Yes | A column with timestamp.                                                                                                                                 |
+| `writer.hudicdctoscd2.operation.column`              | Yes | A column containing value marking a record with an operation.                                                                                            |
+| `writer.hudicdctoscd2.operation.deleted.values`      | Yes | Values marking a record for deletion in the operation column.                                                                                            |
+| `writer.hudicdctoscd2.precombineColumns`             | Yes | When two records have the same key and timestamp value, we will pick the one with the largest value for precombine columns. Evaluated in provided order. |
+| `writer.hudicdctoscd2.precombineColumns.customOrder` | No | Precombine column's custom order in ascending order.                                                                                                     |
+| `writer.common.trigger.type`                          | No | See [Combination writer properties](#common-writer-properties)                                                                                           |
+| `writer.common.trigger.processing.time`               | No | See [Combination writer properties](#common-writer-properties)                                                                                           |
+
+Any additional properties for the `DataStreamWriter` can be added with the prefix `writer.hudicdctoscd2.options`, e.g. `writer.hudicdctoscd2.options.key=value`
+
+**Example**
+- `component.writer=za.co.absa.hyperdrive.compatibility.impl.writer.cdc.hudi.scd2.HudiCDCToSCD2Writer`
+- `writer.hudicdctoscd2.destination.directory=/tmp/destination`
+- `writer.hudicdctoscd2.key.column=key`
+- `writer.hudicdctoscd2.timestamp.column=TIMSTAMP`
+- `writer.hudicdctoscd2.operation.column=ENTTYP`
+- `writer.hudicdctoscd2.operation.deleted.values=DL,FD`
+- `writer.hudicdctoscd2.precombineColumns=ENTTYP`
+- `writer.hudicdctoscd2.precombineColumns.customOrder.ENTTYP=PT,FI,RR,UB,UP,DL,FD`
+
 #### Common writer properties
 
 | Property Name | Required |Description |
@@ -356,6 +440,30 @@ where the key is a string and the value can be of any type. The following contex
 | key.column.prefix | String | If `ConfluentAvroDecodingTransformer` is configured to consume keys, it prefixes the key columns with `key__` such that they can be distinguished in the dataframe. If `key__` happens to be a prefix of a value column, a random alphanumeric string is used instead. |
 | key.column.names | Seq[String] | If `ConfluentAvroDecodingTransformer` is configured to consume keys, it contains the original column names (without prefix) in the key schema. |
  
+#### Secrets Providers
+
+##### AWS SecretsManager
+| Property Name                                            | Required | Description                                                                                                                                                                     |
+|:---------------------------------------------------------|:--------:|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `secretsprovider.config.providers.<provider-id>.class`   |   Yes    | The fully qualified class name of the secrets provider. <provider-id> is an arbitrary string. Multiple secrets providers can be configured by supplying multiple <provider-id>s |
+| `secretsprovider.config.defaultprovider`                 |    No    | The <provider-id> of the secrets provider to be used by default                                                                                                                 |
+| `secretsprovider.secrets.<secret-id>.options.secretname` |   Yes    | The Secret name of the secret in AWS Secrets Manager. <secret-id> is an arbitrary string. Multiple secrets can be configured by supplying multiple <secret-id>s                 |
+| `secretsprovider.secrets.<secret-id>.options.provider`   |    No    | The <provider-id> of the secrets provider to be used for this specific secret.                                                                                                  |
+| `secretsprovider.secrets.<secret-id>.options.readasmap`  |    No    | Set to true if the secret should be interpreted as a json map, set to false if the value should be read as is. Default: true                                                    |
+| `secretsprovider.secrets.<secret-id>.options.key`        |    No    | If the secret should be read as a map, specify the key whose value should be extracted as the secret                                                                            |
+| `secretsprovider.secrets.<secret-id>.options.encoding`   |    No    | Decodes the secret. Valid values: `base64`                                                                                                                                       |
+
+The Secrets Provider will fill the configuration property `secretsprovider.secrets.<secret-id>.secretvalue` with the secret value. This configuration key will be
+available for string interpolation to be used by other configuration properties.
+
+**Example**
+- `secretsprovider.config.providers.awssecretsmanager.class=za.co.absa.hyperdrive.driver.secrets.implementation.aws.AwsSecretsManagerSecretsProvider`
+- `secretsprovider.secrets.truststorepassword.provider=awssecretsmanager`
+- `secretsprovider.secrets.truststorepassword.options.secretname=<the-secret-name>`
+- `secretsprovider.secrets.truststorepassword.options.key=<the-secret-key>`
+- `secretsprovider.secrets.truststorepassword.options.encoding=base64`
+- `reader.option.kafka.ssl.truststore.password=${secretsprovider.secrets.truststorepassword.secretvalue}`
+
 #### Other
 Hyperdrive uses [Apache Commons Configuration 2](https://github.com/apache/commons-configuration). This allows
 properties to be referenced, e.g. like so
@@ -391,4 +499,13 @@ E2E tests require a running Docker instance on the executing machine and are not
 To execute them, build using the profile `all-tests`
 ```
 mvn clean test -Pall-tests
+```
+
+### How to measure code coverage
+```shell
+./>mvn clean install -Pscala-2.ZY,spark-Z,code-coverage
+```
+If module contains measurable data the code coverage report will be generated on path:
+```
+{project-path}\hyperdrive\{module}\target\site\jacoco
 ```

@@ -20,24 +20,27 @@ import io.confluent.kafka.serializers.KafkaAvroSerializer
 import org.apache.avro.generic.GenericData
 import org.apache.commons.configuration2.convert.DefaultListDelimiterHandler
 import org.apache.commons.configuration2.{BaseConfiguration, DynamicCombinedConfiguration}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types.{BinaryType, IntegerType, LongType, StructType}
 import org.apache.spark.sql.{DataFrame, Row}
-import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import za.co.absa.abris.avro.parsing.utils.AvroSchemaUtils
 import za.co.absa.abris.avro.read.confluent.SchemaManagerFactory
 import za.co.absa.abris.avro.registry.ConfluentMockRegistryClient
 import za.co.absa.abris.config.AbrisConfig
-import za.co.absa.commons.spark.SparkTestBase
+import za.co.absa.spark.commons.test.SparkTestBase
 import za.co.absa.hyperdrive.ingestor.implementation.reader.kafka.KafkaStreamReader.KEY_TOPIC
-import za.co.absa.hyperdrive.ingestor.implementation.testutils.abris.AbrisTestUtil.getSchemaRegistryConf
+import za.co.absa.abris.avro.sql.AbrisTestUtil.getSchemaRegistryConf
 import za.co.absa.hyperdrive.ingestor.implementation.transformer.avro.confluent.ConfluentAvroDecodingTransformer._
 import za.co.absa.hyperdrive.ingestor.implementation.transformer.avro.confluent.ConfluentAvroEncodingTransformer.{KEY_SCHEMA_REGISTRY_URL, KEY_SCHEMA_REGISTRY_VALUE_NAMING_STRATEGY}
 import za.co.absa.hyperdrive.ingestor.implementation.utils.AbrisConfigUtil
 
-class TestConfluentAvroDecodingTransformer extends FlatSpec with Matchers with BeforeAndAfter with SparkTestBase {
+class TestConfluentAvroDecodingTransformer extends AnyFlatSpec with Matchers with BeforeAndAfter with SparkTestBase {
 
   private val Topic = "topic"
   private val SchemaRegistryURL = "dummyUrl"
@@ -323,6 +326,7 @@ class TestConfluentAvroDecodingTransformer extends FlatSpec with Matchers with B
     config.addProperty(KEY_SCHEMA_REGISTRY_VALUE_NAMING_STRATEGY, AbrisConfigUtil.TopicNameStrategy)
     config.addProperty(KEY_SCHEMA_REGISTRY_KEY_SCHEMA_ID, SchemaRegistryValueSchemaId)
     config.addProperty(KEY_SCHEMA_REGISTRY_KEY_NAMING_STRATEGY, AbrisConfigUtil.TopicNameStrategy)
+    config.addProperty(KEY_USE_ADVANCED_SCHEMA_CONVERSION, "true")
 
     val decoder = ConfluentAvroDecodingTransformer(config).asInstanceOf[ConfluentAvroDecodingTransformer]
 

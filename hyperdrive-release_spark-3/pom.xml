@@ -18,7 +18,7 @@
     <parent>
         <artifactId>parent-conf_2.12</artifactId>
         <groupId>za.co.absa.hyperdrive</groupId>
-        <version>4.5.3-SNAPSHOT</version>
+        <version>4.7.1-SNAPSHOT</version>
         <relativePath>../parent-conf/pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -59,12 +59,12 @@
                         <configuration>
                             <relocations>
                                 <relocation>
-                                    <pattern>org.apache.commons.beanutils</pattern>
-                                    <shadedPattern>org.apache.shaded.commons.beanutils</shadedPattern>
+                                    <pattern>org.apache.commons.text</pattern>
+                                    <shadedPattern>org.apache.shaded.commons.text</shadedPattern>
                                 </relocation>
                                 <relocation>
-                                    <pattern>com.fasterxml.jackson</pattern>
-                                    <shadedPattern>com.fasterxml.shaded.jackson</shadedPattern>
+                                    <pattern>org.apache.commons.beanutils</pattern>
+                                    <shadedPattern>org.apache.shaded.commons.beanutils</shadedPattern>
                                 </relocation>
                             </relocations>
                             <transformers>

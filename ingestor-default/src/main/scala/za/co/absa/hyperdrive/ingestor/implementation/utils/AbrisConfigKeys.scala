@@ -24,6 +24,7 @@ private[hyperdrive] trait AbrisConfigKeys {
 
 private[hyperdrive] trait AbrisConsumerConfigKeys extends AbrisConfigKeys {
   val schemaId: String
+  val useAdvancedSchemaConversion: String
 }
 
 private[hyperdrive] trait AbrisProducerConfigKeys extends AbrisConfigKeys
